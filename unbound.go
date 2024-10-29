@@ -1,3 +1,4 @@
+// Library used to remotely control unbound
 package unbound
 
 import (
@@ -14,6 +15,7 @@ import (
 	"strings"
 )
 
+// Resource records
 type RR struct {
 	Name  string
 	Value string
@@ -21,6 +23,7 @@ type RR struct {
 	Type  string
 }
 
+// Unbound client configuration
 type UnboundClient struct {
 	Client
 	scheme    string
@@ -28,9 +31,13 @@ type UnboundClient struct {
 	tlsConfig *tls.Config
 }
 
+// Unbound client interface
 type Client interface {
+	// Retrieve local data from Unbound
 	LocalData() []RR
+	// Add a record to unbound
 	AddLocalData(rr RR) error
+	// Remove a record from unbound
 	RemoveLocalData(rr RR) error
 }
 
@@ -74,6 +81,9 @@ func sendCommand(command string, client *UnboundClient, dataCh chan<- string, er
 	scanResult(conn, dataCh, errCh)
 }
 
+// Create a new client for Unbound
+// ca, key and cert are not mandatory and are used to authenticate
+// to the unbound server
 func NewUnboundClient(host string, ca string, key string, cert string) (*UnboundClient, error) {
 	url, err := url.Parse(host)
 	if err != nil {
@@ -140,6 +150,7 @@ func parseLocalData(data string) (RR, error) {
 	return RR{}, fmt.Errorf("No match found in data")
 }
 
+// Return all local records of an unbound server
 func (u *UnboundClient) LocalData() []RR {
 	dataCh := make(chan string)
 	errCh := make(chan error)
@@ -164,6 +175,7 @@ func (u *UnboundClient) LocalData() []RR {
 	return rrs
 }
 
+// Add a record to the unbound server
 func (u *UnboundClient) AddLocalData(rr RR) error {
 	dataCh := make(chan string)
 	errCh := make(chan error)
@@ -188,6 +200,7 @@ func (u *UnboundClient) AddLocalData(rr RR) error {
 	return nil
 }
 
+// Remove a record from the unbound server
 func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	dataCh := make(chan string)
 	errCh := make(chan error)
