@@ -35,11 +35,12 @@ localhost.	10800	IN	SOA	localhost. nobody.invalid. 1 3600 1200 604800 10800
 localhost.	10800	IN	NS	localhost.`
 
 	reader := strings.NewReader(input)
-	ch := make(chan string)
+	dataCh := make(chan string)
+	errCh := make(chan error)
 	countLine := 0
 	wantLine := 4
-	go scanResult(reader, ch)
-	for l := range ch {
+	go scanResult(reader, dataCh, errCh)
+	for l := range dataCh {
 		t.Logf("%s", l)
 		countLine++
 	}
@@ -81,12 +82,13 @@ func TestSendCommand(t *testing.T) {
 				ln.Close()
 			}(ln)
 
-			ch := make(chan string, 1)
+			dataCh := make(chan string, 1)
+			errCh := make(chan error)
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "", "", "")
 			assert.Nil(t, err)
 
-			go sendCommand("test_command", client, ch)
-			result := <-ch
+			go sendCommand("test_command", client, dataCh, errCh)
+			result := <-dataCh
 
 			assert.Equal(t, "UBCT1 test_command", result)
 		})
@@ -142,12 +144,13 @@ func TestSendCommandTls(t *testing.T) {
 				ln.Close()
 			}(ln)
 
-			ch := make(chan string, 1)
+			dataCh := make(chan string, 1)
+			errCh := make(chan error)
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "./testdata/ca.pem", "./testdata/client.key", "./testdata/client.pem")
 			assert.Nil(t, err)
 
-			go sendCommand("test_command", client, ch)
-			result := <-ch
+			go sendCommand("test_command", client, dataCh, errCh)
+			result := <-dataCh
 
 			assert.Equal(t, "UBCT1 test_command", result)
 		})
@@ -182,12 +185,13 @@ func TestSendCommandBadTls(t *testing.T) {
 		ln.Close()
 	}(ln)
 
-	ch := make(chan string, 1)
+	dataCh := make(chan string, 1)
+	errCh := make(chan error)
 	client, err := NewUnboundClient("tcp://127.0.0.1:32322", "./testdata/ca.pem", "./testdata/client.key", "./testdata/client.pem")
 	assert.Nil(t, err)
-	result := sendCommand("test_command", client, ch)
-
-	assert.Error(t, result)
+	go sendCommand("test_command", client, dataCh, errCh)
+	err = <-errCh
+	assert.Error(t, err)
 }
 
 func TestBadClient(t *testing.T) {
@@ -289,7 +293,7 @@ func TestLocalData(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ln, err := net.Listen("unix", "/tmp/abc.sock")
+			ln, err := net.Listen("unix", "/tmp/local.sock")
 			assert.Nil(t, err)
 			go func(ln net.Listener) {
 				fd, err := ln.Accept()
@@ -310,7 +314,7 @@ func TestLocalData(t *testing.T) {
 				ln.Close()
 			}(ln)
 
-			client, err := NewUnboundClient("unix:///tmp/abc.sock", "", "", "")
+			client, _ := NewUnboundClient("unix:///tmp/local.sock", "", "", "")
 			result := client.LocalData()
 
 			assert.Equal(t, tt.expected, result)
@@ -319,7 +323,7 @@ func TestLocalData(t *testing.T) {
 }
 
 func TestAddLocalData(t *testing.T) {
-	ln, err := net.Listen("unix", "/tmp/abc.sock")
+	ln, err := net.Listen("unix", "/tmp/addlocal.sock")
 	assert.Nil(t, err)
 	go func(ln net.Listener) {
 		fd, err := ln.Accept()
@@ -345,14 +349,14 @@ func TestAddLocalData(t *testing.T) {
 		ln.Close()
 	}(ln)
 
-	client, err := NewUnboundClient("unix:///tmp/abc.sock", "", "", "")
+	client, _ := NewUnboundClient("unix:///tmp/addlocal.sock", "", "", "")
 	result := client.AddLocalData(RR{Name: "test.lan", TTL: 300, Type: "A", Value: "127.0.0.1"})
 
 	assert.Nil(t, result)
 }
 
 func TestBadAddLocalData(t *testing.T) {
-	ln, err := net.Listen("unix", "/tmp/abc.sock")
+	ln, err := net.Listen("unix", "/tmp/badlocal.sock")
 	assert.Nil(t, err)
 	go func(ln net.Listener) {
 		fd, err := ln.Accept()
@@ -374,7 +378,7 @@ func TestBadAddLocalData(t *testing.T) {
 		ln.Close()
 	}(ln)
 
-	client, err := NewUnboundClient("unix:///tmp/abc.sock", "", "", "")
+	client, _ := NewUnboundClient("unix:///tmp/badlocal.sock", "", "", "")
 	result := client.AddLocalData(RR{Name: "test.lan", TTL: 300, Type: "A", Value: "127.0.0.1"})
 
 	assert.NotNil(t, result)
@@ -382,7 +386,7 @@ func TestBadAddLocalData(t *testing.T) {
 }
 
 func TestRemoveLocalData(t *testing.T) {
-	ln, err := net.Listen("unix", "/tmp/abc.sock")
+	ln, err := net.Listen("unix", "/tmp/removelocal.sock")
 	assert.Nil(t, err)
 	go func(ln net.Listener) {
 		fd, err := ln.Accept()
@@ -408,14 +412,14 @@ func TestRemoveLocalData(t *testing.T) {
 		ln.Close()
 	}(ln)
 
-	client, err := NewUnboundClient("unix:///tmp/abc.sock", "", "", "")
+	client, _ := NewUnboundClient("unix:///tmp/removelocal.sock", "", "", "")
 	result := client.RemoveLocalData(RR{Name: "test.lan", TTL: 300, Type: "A", Value: "127.0.0.1"})
 
 	assert.Nil(t, result)
 }
 
 func TestBadRemoveLocalData(t *testing.T) {
-	ln, err := net.Listen("unix", "/tmp/abc.sock")
+	ln, err := net.Listen("unix", "/tmp/badremove.sock")
 	assert.Nil(t, err)
 	go func(ln net.Listener) {
 		fd, err := ln.Accept()
@@ -437,7 +441,7 @@ func TestBadRemoveLocalData(t *testing.T) {
 		ln.Close()
 	}(ln)
 
-	client, err := NewUnboundClient("unix:///tmp/abc.sock", "", "", "")
+	client, _ := NewUnboundClient("unix:///tmp/badremove.sock", "", "", "")
 	result := client.RemoveLocalData(RR{Name: "test.lan", TTL: 300, Type: "A", Value: "127.0.0.1"})
 
 	assert.NotNil(t, result)
