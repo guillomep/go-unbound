@@ -23,9 +23,13 @@ jobs:
       - name: Test
         run: make unit-test
       - name: Static analysis
-        run: |
-          make static-analysis
-          make release-check
+        run: make static-analysis
+      - name: Release check
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: ~> v2
+          args: release --snapshot --clean --skip=publish
       - name: Test Report
         uses: dorny/test-reporter@v1
         if: success() || failure()
