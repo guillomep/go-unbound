@@ -5,6 +5,9 @@ on:
     tags:
       - v*
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-22.04
@@ -14,6 +17,13 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: stable
+       -
+        name: Import GPG key
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
       - name: Release with Goreleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -21,4 +31,5 @@ jobs:
           version: latest
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
