@@ -46,6 +46,11 @@ signs:
       - "--detach-sign"
       - "${artifact}"
 
+header: |
+  ## {{ .TagSubject }} ({{ .Date }})
+
+  {{ .TagBody }}
+
 changelog:
   use: github
   sort: asc
