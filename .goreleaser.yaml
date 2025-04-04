@@ -16,36 +16,6 @@ before:
 builds:
 - skip: true
 
-archives:
-  - formats: tar.gz
-    # this name template makes the OS and Arch compatible with the results of `uname`.
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        formats: zip
-
-checksum:
-  disable: false
-  name_template: '{{ .ProjectName }}_v{{ .Version }}_SHA256SUMS'
-  algorithm: sha256
-signs:
-  - artifacts: checksum
-    args:
-      - "--batch"
-      - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
-
 header: |
   ## {{ .TagSubject }} ({{ .Date }})
 
