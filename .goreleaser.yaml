@@ -16,10 +16,11 @@ before:
 builds:
 - skip: true
 
-header: |
-  ## {{ .TagSubject }} ({{ .Date }})
+release:
+  header: |
+    ## {{ .TagSubject }} ({{ .Date }})
 
-  {{ .TagBody }}
+    {{ .TagBody }}
 
 changelog:
   use: github
