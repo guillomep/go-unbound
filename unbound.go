@@ -215,11 +215,11 @@ func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	select {
 	case line := <-dataCh:
 		if strings.ToLower(line) != "ok" {
-			return fmt.Errorf("Failed to add local data: %s", line)
+			return fmt.Errorf("Failed to delete local data: %s", line)
 		}
 		break
 	case err := <-errCh:
-		return fmt.Errorf("Failed to add local data: %v", err)
+		return fmt.Errorf("Failed to delete local data: %v", err)
 	}
 
 	return nil
