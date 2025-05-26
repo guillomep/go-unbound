@@ -208,18 +208,18 @@ func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	var sb strings.Builder
 
 	sb.WriteString("local_data_remove ")
-	sb.WriteString(fmt.Sprintf("%s\t%d\tIN\t%s\t%s", rr.Name, rr.TTL, rr.Type, rr.Value))
+	sb.WriteString(fmt.Sprintf("%s", rr.Name))
 
 	go sendCommand(sb.String(), u, dataCh, errCh)
 
 	select {
 	case line := <-dataCh:
 		if strings.ToLower(line) != "ok" {
-			return fmt.Errorf("Failed to add local data: %s", line)
+			return fmt.Errorf("Failed to delete local data: %s", line)
 		}
 		break
 	case err := <-errCh:
-		return fmt.Errorf("Failed to add local data: %v", err)
+		return fmt.Errorf("Failed to delete local data: %v", err)
 	}
 
 	return nil
