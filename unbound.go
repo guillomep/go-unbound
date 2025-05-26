@@ -208,7 +208,7 @@ func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	var sb strings.Builder
 
 	sb.WriteString("local_data_remove ")
-	sb.WriteString(fmt.Sprintf("%s", rr.Name))
+	sb.WriteString(rr.Name)
 
 	go sendCommand(sb.String(), u, dataCh, errCh)
 
