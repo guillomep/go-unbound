@@ -400,7 +400,7 @@ func TestRemoveLocalData(t *testing.T) {
 			return
 		}
 
-		if string(buf[0:nr]) == "UBCT1 local_data_remove test.lan\t300\tIN\tA\t127.0.0.1\n" {
+		if string(buf[0:nr]) == "UBCT1 local_data_remove test.lan\n" {
 			_, err = fd.Write([]byte("ok"))
 		} else {
 			_, err = fd.Write(buf)
