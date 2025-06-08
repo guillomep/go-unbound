@@ -1,13 +1,16 @@
 package unbound
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"github.com/stretchr/testify/assert"
 	"net"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func echoServer(c net.Conn) {
@@ -87,15 +90,27 @@ func TestSendCommand(t *testing.T) {
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "", "", "")
 			assert.Nil(t, err)
 
+			ctx, cancel := context.WithCancel(t.Context())
 			go sendCommand("test_command", client, dataCh, errCh)
-			result := <-dataCh
-
-			assert.Equal(t, "UBCT1 test_command", result)
+			go func() {
+				defer cancel()
+				for {
+					select {
+					case result := <-dataCh:
+						assert.Equal(t, "UBCT1 test_command", result)
+						return
+					case err := <-errCh:
+						assert.Nil(t, err)
+						return
+					}
+				}
+			}()
+			<-ctx.Done()
 		})
 	}
 }
 
-func TestSendCommandTls(t *testing.T) {
+func TestSendCommandTLSWithFiles(t *testing.T) {
 	caData, _ := os.ReadFile("./testdata/ca.pem")
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caData) {
@@ -149,15 +164,111 @@ func TestSendCommandTls(t *testing.T) {
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "./testdata/ca.pem", "./testdata/client.key", "./testdata/client.pem")
 			assert.Nil(t, err)
 
+			ctx, cancel := context.WithCancel(t.Context())
 			go sendCommand("test_command", client, dataCh, errCh)
-			result := <-dataCh
-
-			assert.Equal(t, "UBCT1 test_command", result)
+			go func() {
+				defer cancel()
+				for {
+					select {
+					case result := <-dataCh:
+						assert.Equal(t, "UBCT1 test_command", result)
+						return
+					case err := <-errCh:
+						assert.Nil(t, err)
+						return
+					}
+				}
+			}()
+			<-ctx.Done()
 		})
 	}
 }
 
-func TestSendCommandBadTls(t *testing.T) {
+func TestSendCommandTLSInMemory(t *testing.T) {
+	caCerts, err := parseCertificateFile("./testdata/ca.pem")
+	require.NoError(t, err)
+	roots := x509.NewCertPool()
+	for _, cert := range caCerts {
+		roots.AddCert(cert)
+	}
+
+	serverCert, err := tls.LoadX509KeyPair("./testdata/server.pem", "./testdata/server.key")
+	require.NoError(t, err)
+
+	controlCerts, err := parseCertificateFile("./testdata/client.pem")
+	require.NoError(t, err)
+	controlKey, err := parsePrivateKeyFile("./testdata/client.key")
+	require.NoError(t, err)
+
+	tests := []struct {
+		typ      string
+		listenOn string
+		clean    func()
+	}{
+		{
+			typ:      "tcp",
+			listenOn: "127.0.0.1:32321",
+			clean:    func() {},
+		},
+		{
+			typ:      "unix",
+			listenOn: "/tmp/gotls.sock",
+			clean:    func() { os.Remove("/tmp/gotls.sock") },
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.typ+"://"+tt.listenOn, func(t *testing.T) {
+			defer tt.clean()
+			ln, err := tls.Listen(tt.typ, tt.listenOn, &tls.Config{
+				Certificates: []tls.Certificate{serverCert},
+				ClientCAs:    roots,
+				ServerName:   "unbound",
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+			},
+			)
+			if err != nil {
+				panic(err)
+			}
+			go func(ln net.Listener) {
+				fd, err := ln.Accept()
+				if err != nil {
+					panic(err)
+				}
+
+				echoServer(fd)
+				ln.Close()
+			}(ln)
+
+			dataCh := make(chan string, 1)
+			errCh := make(chan error)
+			client, err := NewClient(tt.typ+"://"+tt.listenOn,
+				WithServerCertificates(caCerts),
+				WithControlCertificates(controlCerts),
+				WithControlPrivateKey(controlKey),
+			)
+			assert.Nil(t, err)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			go sendCommand("test_command", client, dataCh, errCh)
+			go func() {
+				defer cancel()
+				for {
+					select {
+					case result := <-dataCh:
+						assert.Equal(t, "UBCT1 test_command", result)
+						return
+					case err := <-errCh:
+						assert.Nil(t, err)
+						return
+					}
+				}
+			}()
+			<-ctx.Done()
+		})
+	}
+}
+
+func TestSendCommandBadTLS(t *testing.T) {
 	caData, _ := os.ReadFile("./testdata/ca.pem")
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM(caData) {
