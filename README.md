@@ -14,8 +14,8 @@ When certificate authentication is enabled:
 ```go
 client, err := NewClient("unix:///run/unbound.sock",
                                 WithServerCertificatesFile("/path/to/ca.pem"),
-                                WithControlCertificates("/path/to/client.key"),
-                                WithControlPrivateKey("/path/to/client.pem"))
+                                WithControlCertificatesFile("/path/to/client.key"),
+                                WithControlPrivateKeyFile("/path/to/client.pem"))
 ```
 
 If you are using TCP the address must be prefixed by `tcp://`.
