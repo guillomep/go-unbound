@@ -9,11 +9,20 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// Unbound client interface
+type Client interface {
+	// Retrieve local data from Unbound
+	LocalData() []RR
+	// Add a record to unbound
+	AddLocalData(rr RR) error
+	// Remove a record from unbound
+	RemoveLocalData(rr RR) error
+}
 
 // Resource records
 type RR struct {
@@ -26,128 +35,71 @@ type RR struct {
 // Unbound client configuration
 type UnboundClient struct {
 	Client
-	scheme    string
-	host      string
+	scheme string
+	host   string
+
 	tlsConfig *tls.Config
 }
 
-// Unbound client interface
-type Client interface {
-	// Retrieve local data from Unbound
-	LocalData() []RR
-	// Add a record to unbound
-	AddLocalData(rr RR) error
-	// Remove a record from unbound
-	RemoveLocalData(rr RR) error
-}
-
-func scanResult(input io.Reader, dataCh chan<- string, errCh chan<- error) {
-	scanner := bufio.NewScanner(input)
-	scanner.Split(bufio.ScanLines)
-
-	for scanner.Scan() {
-		if scanner.Text() == "" {
-			continue
+func NewClient(host string, opts ...OptionFn) (*UnboundClient, error) {
+	var options Options
+	for _, opt := range opts {
+		if err := opt(&options); err != nil {
+			return nil, err
 		}
-
-		dataCh <- scanner.Text()
 	}
-	close(dataCh)
 
-	errCh <- scanner.Err()
-}
-
-func sendCommand(command string, client *UnboundClient, dataCh chan<- string, errCh chan<- error) {
-	var (
-		conn net.Conn
-		err  error
-	)
-
-	if client.tlsConfig == nil {
-		conn, err = net.Dial(client.scheme, client.host)
-	} else {
-		conn, err = tls.Dial(client.scheme, client.host, client.tlsConfig)
-	}
-	if err != nil {
-		errCh <- err
-		return
-	}
-	defer conn.Close()
-	_, err = conn.Write([]byte("UBCT1 " + command + "\n"))
-	if err != nil {
-		errCh <- err
-		return
-	}
-	scanResult(conn, dataCh, errCh)
-}
-
-// Create a new client for Unbound
-// ca, key and cert are not mandatory and are used to authenticate
-// to the unbound server
-func NewUnboundClient(host string, ca string, key string, cert string) (*UnboundClient, error) {
-	url, err := url.Parse(host)
+	parsedURL, err := url.Parse(host)
 	if err != nil {
 		return nil, err
 	}
 
-	clientHost := url.Host
-	if url.Scheme == "unix" {
-		clientHost = url.Path
-	}
-
-	if ca == "" && cert == "" {
-		return &UnboundClient{
-			scheme: url.Scheme,
-			host:   clientHost,
-		}, nil
-	}
-
-	caData, err := os.ReadFile(ca)
-	if err != nil {
-		return nil, err
-	}
-	roots := x509.NewCertPool()
-	if !roots.AppendCertsFromPEM(caData) {
-		return nil, fmt.Errorf("Failed to parse CA")
-	}
-
-	certData, err := os.ReadFile(cert)
-	if err != nil {
-		return nil, err
-	}
-	keyData, err := os.ReadFile(key)
-	if err != nil {
-		return nil, err
-	}
-	keyPair, err := tls.X509KeyPair(certData, keyData)
-	if err != nil {
-		return nil, err
+	clientHost := parsedURL.Host
+	if parsedURL.Scheme == "unix" {
+		clientHost = parsedURL.Path
 	}
 
 	return &UnboundClient{
-		scheme: url.Scheme,
-		host:   clientHost,
-		tlsConfig: &tls.Config{
-			Certificates: []tls.Certificate{keyPair},
-			RootCAs:      roots,
-			ServerName:   "unbound",
-		},
+		scheme:    parsedURL.Scheme,
+		host:      clientHost,
+		tlsConfig: (*UnboundClient)(nil).buildTLSConfig(options),
 	}, nil
 }
 
-func parseLocalData(data string) (RR, error) {
-	rrPattern := regexp.MustCompile(`^([A-Za-z0-9-.]+)\t(\d+)\tIN\t([A-Z]+)\t(.*)$`)
-	if matches := rrPattern.FindStringSubmatch(data); matches != nil {
-		// Don't care about error since with the regex it is a number
-		ttl, _ := strconv.Atoi(matches[2])
-		return RR{
-			Name:  matches[1],
-			TTL:   ttl,
-			Type:  matches[3],
-			Value: matches[4],
-		}, nil
+// Deprecated: Use NewClient instead.
+func NewUnboundClient(host string, serverCertFile, controlPrivateKeyFile, controlCertFile string) (*UnboundClient, error) {
+	return NewClient(host,
+		WithServerCertificatesFile(serverCertFile),
+		WithControlCertificatesFile(controlCertFile),
+		WithControlPrivateKeyFile(controlPrivateKeyFile),
+	)
+}
+
+func (_ *UnboundClient) buildTLSConfig(opts Options) *tls.Config {
+	if len(opts.ServerCertificates) == 0 && len(opts.ControlCertificates) == 0 {
+		return nil
 	}
-	return RR{}, fmt.Errorf("No match found in data")
+
+	roots := x509.NewCertPool()
+	for _, cert := range opts.ServerCertificates {
+		roots.AddCert(cert)
+	}
+
+	controlCertificate := tls.Certificate{
+		Certificate: func() (certs [][]byte) {
+			for _, cert := range opts.ControlCertificates {
+				certs = append(certs, cert.Raw)
+			}
+			return certs
+		}(),
+		PrivateKey: opts.ControlPrivateKey,
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{controlCertificate},
+		RootCAs:      roots,
+		ServerName:   "unbound",
+	}
 }
 
 // Return all local records of an unbound server
@@ -223,4 +175,59 @@ func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	}
 
 	return nil
+}
+
+func parseLocalData(data string) (RR, error) {
+	rrPattern := regexp.MustCompile(`^([A-Za-z0-9-.]+)\t(\d+)\tIN\t([A-Z]+)\t(.*)$`)
+	if matches := rrPattern.FindStringSubmatch(data); matches != nil {
+		// Don't care about error since with the regex it is a number
+		ttl, _ := strconv.Atoi(matches[2])
+		return RR{
+			Name:  matches[1],
+			TTL:   ttl,
+			Type:  matches[3],
+			Value: matches[4],
+		}, nil
+	}
+	return RR{}, fmt.Errorf("No match found in data")
+}
+
+func scanResult(input io.Reader, dataCh chan<- string, errCh chan<- error) {
+	scanner := bufio.NewScanner(input)
+	scanner.Split(bufio.ScanLines)
+
+	for scanner.Scan() {
+		if scanner.Text() == "" {
+			continue
+		}
+
+		dataCh <- scanner.Text()
+	}
+	close(dataCh)
+
+	errCh <- scanner.Err()
+}
+
+func sendCommand(command string, client *UnboundClient, dataCh chan<- string, errCh chan<- error) {
+	var (
+		conn net.Conn
+		err  error
+	)
+
+	if client.tlsConfig == nil {
+		conn, err = net.Dial(client.scheme, client.host)
+	} else {
+		conn, err = tls.Dial(client.scheme, client.host, client.tlsConfig)
+	}
+	if err != nil {
+		errCh <- err
+		return
+	}
+	defer conn.Close()
+	_, err = conn.Write([]byte("UBCT1 " + command + "\n"))
+	if err != nil {
+		errCh <- err
+		return
+	}
+	scanResult(conn, dataCh, errCh)
 }
