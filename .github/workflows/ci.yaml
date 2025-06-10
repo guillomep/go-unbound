@@ -10,13 +10,6 @@ on:
     tags-ignore:
       - '**'
 
-permissions:
-  contents: read
-  actions: read
-  checks: write
-  pull-requests: write
-  statuses: write
-
 jobs:
   build:
 
@@ -45,22 +38,9 @@ jobs:
           distribution: goreleaser
           version: ~> v2
           args: release --snapshot --clean --skip=publish
-      - name: Test Report
-        uses: dorny/test-reporter@v2
-        if: success() || failure()
-        with:
-          name: Unit Test Results
-          path: ./build/reports/**-test.xml
-          reporter: java-junit
-          fail-on-error: 'true'
-          use-actions-summary: 'false'
       - name: Upload Reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-reports
           path: ./build/reports/**
-      - name: Go Coverage Badge  # Pass the `coverage.out` output to this action
-        uses: tj-actions/coverage-badge-go@v3
-        with:
-          filename: ./build/reports/unit-test-coverage.out

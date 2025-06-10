@@ -1,0 +1,27 @@
+name: 'Test Report'
+on:
+  workflow_run:
+    workflows: ['CI']                     # runs after CI workflow
+    types:
+      - completed
+permissions:
+  contents: read
+  actions: read
+  checks: write
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Test Report
+      uses: dorny/test-reporter@v2
+      with:
+        name: Unit Test Results
+        path: ./build/reports/**-test.xml
+        reporter: java-junit
+        fail-on-error: 'true'
+        use-actions-summary: 'false'
+    - name: Go Coverage Badge  # Pass the `coverage.out` output to this action
+      uses: tj-actions/coverage-badge-go@v3
+      with:
+        filename: ./build/reports/unit-test-coverage.out
+
