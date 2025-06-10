@@ -17,7 +17,7 @@ jobs:
       with:
         artifact: unit-test-reports
         name: Unit Test Results
-        path: ./build/reports/**-test.xml
+        path: '**-test.xml'
         reporter: java-junit
         fail-on-error: 'true'
         use-actions-summary: 'false'
