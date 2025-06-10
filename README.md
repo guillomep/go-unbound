@@ -7,12 +7,15 @@ Use unbound-control from a Go Library.
 
 When certificate authentication is not enabled:
 ```go
-client, err := NewUnboundClient("unix:///run/unbound.sock", "", "", "")
+client, err := NewClient("unix:///run/unbound.sock")
 ```
 
 When certificate authentication is enabled:
 ```go
-client, err := NewUnboundClient("unix:///run/unbound.sock", "/path/to/ca.pem", "/path/to/client.key", "/path/to/client.pem")
+client, err := NewClient("unix:///run/unbound.sock",
+                                WithServerCertificatesFile("/path/to/ca.pem"),
+                                WithControlCertificates("/path/to/client.key"),
+                                WithControlPrivateKey("/path/to/client.pem"))
 ```
 
 If you are using TCP the address must be prefixed by `tcp://`.
