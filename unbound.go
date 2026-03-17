@@ -105,7 +105,7 @@ func (_ *UnboundClient) buildTLSConfig(opts Options) *tls.Config {
 // Return all local records of an unbound server
 func (u *UnboundClient) LocalData() []RR {
 	dataCh := make(chan string)
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 
 	var rrs []RR
 	go sendCommand("list_local_data", u, dataCh, errCh)
@@ -130,7 +130,7 @@ func (u *UnboundClient) LocalData() []RR {
 // Add a record to the unbound server
 func (u *UnboundClient) AddLocalData(rr RR) error {
 	dataCh := make(chan string)
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 
 	var sb strings.Builder
 
@@ -155,7 +155,7 @@ func (u *UnboundClient) AddLocalData(rr RR) error {
 // Remove a record from the unbound server
 func (u *UnboundClient) RemoveLocalData(rr RR) error {
 	dataCh := make(chan string)
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 
 	var sb strings.Builder
 
