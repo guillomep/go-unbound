@@ -41,6 +41,8 @@ type UnboundClient struct {
 	tlsConfig *tls.Config
 }
 
+var rrPattern = regexp.MustCompile(`^([A-Za-z0-9-.]+)\t(\d+)\tIN\t([A-Z]+)\t(.*)$`)
+
 func NewClient(host string, opts ...OptionFn) (*UnboundClient, error) {
 	var options Options
 	for _, opt := range opts {
@@ -178,7 +180,6 @@ func (u *UnboundClient) RemoveLocalData(rr RR) error {
 }
 
 func parseLocalData(data string) (RR, error) {
-	rrPattern := regexp.MustCompile(`^([A-Za-z0-9-.]+)\t(\d+)\tIN\t([A-Z]+)\t(.*)$`)
 	if matches := rrPattern.FindStringSubmatch(data); matches != nil {
 		// Don't care about error since with the regex it is a number
 		ttl, _ := strconv.Atoi(matches[2])
