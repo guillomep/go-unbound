@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"go.uber.org/goleak"
 )
 
 func echoServer(c net.Conn) {
@@ -39,7 +41,7 @@ localhost.	10800	IN	NS	localhost.`
 
 	reader := strings.NewReader(input)
 	dataCh := make(chan string)
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	countLine := 0
 	wantLine := 4
 	go scanResult(reader, dataCh, errCh)
@@ -86,7 +88,7 @@ func TestSendCommand(t *testing.T) {
 			}(ln)
 
 			dataCh := make(chan string, 1)
-			errCh := make(chan error)
+			errCh := make(chan error, 1)
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "", "", "")
 			assert.Nil(t, err)
 
@@ -160,7 +162,7 @@ func TestSendCommandTLSWithFiles(t *testing.T) {
 			}(ln)
 
 			dataCh := make(chan string, 1)
-			errCh := make(chan error)
+			errCh := make(chan error, 1)
 			client, err := NewUnboundClient(tt.typ+"://"+tt.listenOn, "./testdata/ca.pem", "./testdata/client.key", "./testdata/client.pem")
 			assert.Nil(t, err)
 
@@ -240,7 +242,7 @@ func TestSendCommandTLSInMemory(t *testing.T) {
 			}(ln)
 
 			dataCh := make(chan string, 1)
-			errCh := make(chan error)
+			errCh := make(chan error, 1)
 			client, err := NewClient(tt.typ+"://"+tt.listenOn,
 				WithServerCertificates(caCerts),
 				WithControlCertificates(controlCerts),
@@ -297,7 +299,7 @@ func TestSendCommandBadTLS(t *testing.T) {
 	}(ln)
 
 	dataCh := make(chan string, 1)
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	client, err := NewUnboundClient("tcp://127.0.0.1:32322", "./testdata/ca.pem", "./testdata/client.key", "./testdata/client.pem")
 	assert.Nil(t, err)
 	go sendCommand("test_command", client, dataCh, errCh)
@@ -557,4 +559,8 @@ func TestBadRemoveLocalData(t *testing.T) {
 
 	assert.NotNil(t, result)
 	assert.Error(t, result)
+}
+
+func TestMain(m *testing.M) {
+	goleak.VerifyTestMain(m)
 }
