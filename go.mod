@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/golangci/golangci-lint v1.64.8
 	github.com/stretchr/testify v1.11.1
-	go.uber.org/goleak v1.1.11
+	go.uber.org/goleak v1.3.0
 	gotest.tools/gotestsum v1.13.0
 )
 
